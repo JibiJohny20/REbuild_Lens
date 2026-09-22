@@ -40,9 +40,7 @@ export class InteractionManager {
 
     // When true, a one-finger drag ANYWHERE on screen moves the current
     // selection (armed by the "Move" button) rather than requiring the
-    // drag to start precisely on the model's mesh. Makes the app usable
-    // when a model is small on screen, and gives the Move button real
-    // behaviour rather than being purely decorative.
+    // drag to start precisely on the model's mesh.
     this.moveModeActive = false;
 
     this.listeners = {
@@ -64,20 +62,36 @@ export class InteractionManager {
   // Placement
   // --------------------------------------------------------------------
 
-  async placeModel(modelId, position, quaternion = new THREE.Quaternion()) {
+  async placeModel(
+    modelId,
+    position,
+    quaternion = new THREE.Quaternion()
+  ) {
     let wrapper;
+
     try {
-      wrapper = await this.modelManager.getInstance(modelId);
+      // FIX:
+      // createInstance() loads and creates a NEW model.
+      // getInstance() is only for retrieving an already placed instance.
+      wrapper = await this.modelManager.createInstance(modelId);
     } catch (err) {
-      this._emit('loadError', err.message || String(err));
+      console.error('Failed to create model:', err);
+
+      this._emit(
+        'loadError',
+        err.message || String(err)
+      );
+
       return null;
     }
 
     wrapper.position.copy(position);
     wrapper.quaternion.copy(quaternion);
+
     this.scene.add(wrapper);
 
     const id = nextId++;
+
     const record = {
       id,
       modelId,
@@ -88,10 +102,15 @@ export class InteractionManager {
         scale: wrapper.scale.clone(),
       },
     };
+
     wrapper.userData.placedId = id;
+
     this.objects.set(id, record);
+
     this._emit('objectsChange', this.list());
+
     this.selectObject(id);
+
     return record;
   }
 
@@ -105,11 +124,21 @@ export class InteractionManager {
 
   selectObject(id) {
     if (this.selectedId === id) return;
+
     this._setHighlight(this.selectedId, false);
+
     this.selectedId = id;
+
     this._setHighlight(this.selectedId, true);
-    if (id == null) this.moveModeActive = false;
-    this._emit('selectionChange', this.getSelected());
+
+    if (id == null) {
+      this.moveModeActive = false;
+    }
+
+    this._emit(
+      'selectionChange',
+      this.getSelected()
+    );
   }
 
   clearSelection() {
@@ -117,204 +146,511 @@ export class InteractionManager {
   }
 
   setMoveMode(active) {
-    this.moveModeActive = !!active && this.selectedId != null;
+    this.moveModeActive =
+      !!active && this.selectedId != null;
+
     return this.moveModeActive;
   }
 
   getSelected() {
-    return this.selectedId != null ? this.objects.get(this.selectedId) || null : null;
+    return this.selectedId != null
+      ? this.objects.get(this.selectedId) || null
+      : null;
   }
 
   _setHighlight(id, on) {
-    const rec = id != null ? this.objects.get(id) : null;
+    const rec =
+      id != null
+        ? this.objects.get(id)
+        : null;
+
     if (!rec) return;
+
     rec.group.traverse((node) => {
-      if (node.isMesh) {
-        const mats = Array.isArray(node.material) ? node.material : [node.material];
-        mats.forEach((m) => {
-          if (!m) return;
-          if (on) {
-            if (m.emissive) {
-              m.userData._prevEmissive = m.userData._prevEmissive ?? m.emissive.getHex();
-              m.emissive.set(0x2d6cdf);
-              m.emissiveIntensity = 0.28;
-            }
-          } else if (m.emissive && m.userData._prevEmissive !== undefined) {
-            m.emissive.setHex(m.userData._prevEmissive);
-            m.emissiveIntensity = 1;
+      if (!node.isMesh) return;
+
+      const mats = Array.isArray(node.material)
+        ? node.material
+        : [node.material];
+
+      mats.forEach((m) => {
+        if (!m) return;
+
+        if (on) {
+          if (m.emissive) {
+            m.userData._prevEmissive =
+              m.userData._prevEmissive ??
+              m.emissive.getHex();
+
+            m.emissive.set(0x2d6cdf);
+            m.emissiveIntensity = 0.28;
           }
-        });
-      }
+        } else if (
+          m.emissive &&
+          m.userData._prevEmissive !== undefined
+        ) {
+          m.emissive.setHex(
+            m.userData._prevEmissive
+          );
+
+          m.emissiveIntensity = 1;
+        }
+      });
     });
   }
 
   // --------------------------------------------------------------------
-  // Raycasting (used for both "select existing object" and building the
-  // NDC ray callers can reuse to hit-test a ground plane for placement).
+  // Raycasting
   // --------------------------------------------------------------------
 
-  /** Returns the placedId hit by a ray from `camera` through NDC (x,y), or null. */
-  raycastForObject(ndcX, ndcY, camera) {
-    this._raycaster.setFromCamera({ x: ndcX, y: ndcY }, camera);
-    const groups = this.list().map((r) => r.group);
-    const hits = this._raycaster.intersectObjects(groups, true);
+  /** Returns the placedId hit by a ray from camera through NDC. */
+  raycastForObject(
+    ndcX,
+    ndcY,
+    camera
+  ) {
+    this._raycaster.setFromCamera(
+      {
+        x: ndcX,
+        y: ndcY,
+      },
+      camera
+    );
+
+    const groups = this
+      .list()
+      .map((r) => r.group);
+
+    const hits =
+      this._raycaster.intersectObjects(
+        groups,
+        true
+      );
+
     if (!hits.length) return null;
+
     let node = hits[0].object;
-    while (node && node.userData.placedId === undefined) node = node.parent;
-    return node ? node.userData.placedId : null;
+
+    while (
+      node &&
+      node.userData.placedId === undefined
+    ) {
+      node = node.parent;
+    }
+
+    return node
+      ? node.userData.placedId
+      : null;
   }
 
-  /** Ray-cast NDC (x,y) from camera against an arbitrary ground plane (y = groundY). Returns a Vector3 or null. */
-  raycastGround(ndcX, ndcY, camera, groundY = 0) {
-    this._raycaster.setFromCamera({ x: ndcX, y: ndcY }, camera);
-    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY);
+  /** Ray-cast NDC against an arbitrary ground plane. */
+  raycastGround(
+    ndcX,
+    ndcY,
+    camera,
+    groundY = 0
+  ) {
+    this._raycaster.setFromCamera(
+      {
+        x: ndcX,
+        y: ndcY,
+      },
+      camera
+    );
+
+    const plane = new THREE.Plane(
+      new THREE.Vector3(0, 1, 0),
+      -groundY
+    );
+
     const point = new THREE.Vector3();
-    const hit = this._raycaster.ray.intersectPlane(plane, point);
+
+    const hit =
+      this._raycaster.ray.intersectPlane(
+        plane,
+        point
+      );
+
     return hit ? point : null;
   }
 
   // --------------------------------------------------------------------
-  // Transform helpers (used by both control-panel buttons and gestures)
+  // Transform helpers
   // --------------------------------------------------------------------
 
   rotateSelected(radians) {
     const rec = this.getSelected();
+
     if (!rec) return;
+
     rec.group.rotateY(radians);
-    this._emit('selectionChange', rec);
+
+    this._emit(
+      'selectionChange',
+      rec
+    );
   }
 
   scaleSelectedBy(factor) {
     const rec = this.getSelected();
+
     if (!rec) return;
-    const current = rec.group.scale.x;
-    const target = THREE.MathUtils.clamp(current * factor, APP_CONFIG.minScale, APP_CONFIG.maxScale);
+
+    const current =
+      rec.group.scale.x;
+
+    const target =
+      THREE.MathUtils.clamp(
+        current * factor,
+        APP_CONFIG.minScale,
+        APP_CONFIG.maxScale
+      );
+
     rec.group.scale.setScalar(target);
-    this._emit('selectionChange', rec);
+
+    this._emit(
+      'selectionChange',
+      rec
+    );
   }
 
   moveSelectedTo(vector3) {
     const rec = this.getSelected();
+
     if (!rec) return;
+
     rec.group.position.copy(vector3);
-    this._emit('selectionChange', rec);
+
+    this._emit(
+      'selectionChange',
+      rec
+    );
   }
+
+  // --------------------------------------------------------------------
+  // Duplicate
+  // --------------------------------------------------------------------
 
   async duplicateSelected() {
     const rec = this.getSelected();
+
     if (!rec) return null;
-    const offset = APP_CONFIG.duplicateOffset;
-    const pos = rec.group.position.clone().add(new THREE.Vector3(offset.x, offset.y, offset.z));
-    const quat = rec.group.quaternion.clone();
-    const dup = await this.placeModel(rec.modelId, pos, quat);
+
+    const offset =
+      APP_CONFIG.duplicateOffset;
+
+    const pos =
+      rec.group.position
+        .clone()
+        .add(
+          new THREE.Vector3(
+            offset.x,
+            offset.y,
+            offset.z
+          )
+        );
+
+    const quat =
+      rec.group.quaternion.clone();
+
+    const dup =
+      await this.placeModel(
+        rec.modelId,
+        pos,
+        quat
+      );
+
     if (dup) {
-      dup.group.scale.copy(rec.group.scale);
+      dup.group.scale.copy(
+        rec.group.scale
+      );
     }
+
     return dup;
   }
 
+  // --------------------------------------------------------------------
+  // Reset
+  // --------------------------------------------------------------------
+
   resetSelected() {
     const rec = this.getSelected();
+
     if (!rec) return;
-    rec.group.position.copy(rec.original.position);
-    rec.group.quaternion.copy(rec.original.quaternion);
-    rec.group.scale.copy(rec.original.scale);
-    this._emit('selectionChange', rec);
+
+    rec.group.position.copy(
+      rec.original.position
+    );
+
+    rec.group.quaternion.copy(
+      rec.original.quaternion
+    );
+
+    rec.group.scale.copy(
+      rec.original.scale
+    );
+
+    this._emit(
+      'selectionChange',
+      rec
+    );
   }
+
+  // --------------------------------------------------------------------
+  // Delete
+  // --------------------------------------------------------------------
 
   deleteSelected() {
     const rec = this.getSelected();
+
     if (!rec) return;
+
     this.scene.remove(rec.group);
+
     ModelManager.dispose(rec.group);
+
     this.objects.delete(rec.id);
+
     this.selectedId = null;
-    this._emit('selectionChange', null);
-    this._emit('objectsChange', this.list());
+
+    this._emit(
+      'selectionChange',
+      null
+    );
+
+    this._emit(
+      'objectsChange',
+      this.list()
+    );
   }
+
+  // --------------------------------------------------------------------
+  // Clear
+  // --------------------------------------------------------------------
 
   clearAll() {
     this.list().forEach((rec) => {
       this.scene.remove(rec.group);
-      ModelManager.dispose(rec.group);
+
+      ModelManager.dispose(
+        rec.group
+      );
     });
+
     this.objects.clear();
+
     this.selectedId = null;
-    this._emit('selectionChange', null);
-    this._emit('objectsChange', this.list());
+
+    this._emit(
+      'selectionChange',
+      null
+    );
+
+    this._emit(
+      'objectsChange',
+      this.list()
+    );
   }
 
   // --------------------------------------------------------------------
-  // Shared pointer gestures: bind once per render surface.
-  // getCamera() must always return the camera currently in use (this
-  // differs between preview mode and an active XR session).
-  // onEmptyTap(ndcX, ndcY) fires when a tap doesn't land on an existing
-  // object — the caller decides whether that means "place a new model".
+  // Shared pointer gestures
   // --------------------------------------------------------------------
 
-  attachGestures(domElement, { getCamera, onEmptyTap }) {
-    const toNDC = (clientX, clientY) => {
-      const rect = domElement.getBoundingClientRect();
+  attachGestures(
+    domElement,
+    { getCamera, onEmptyTap }
+  ) {
+    const toNDC = (
+      clientX,
+      clientY
+    ) => {
+      const rect =
+        domElement.getBoundingClientRect();
+
       return {
-        x: ((clientX - rect.left) / rect.width) * 2 - 1,
-        y: -((clientY - rect.top) / rect.height) * 2 + 1,
+        x:
+          ((clientX - rect.left) /
+            rect.width) *
+            2 -
+          1,
+
+        y:
+          -(
+            ((clientY - rect.top) /
+              rect.height) *
+              2 -
+            1
+          ),
       };
     };
 
     const onPointerDown = (e) => {
-      this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-      domElement.setPointerCapture?.(e.pointerId);
+      this._pointers.set(
+        e.pointerId,
+        {
+          x: e.clientX,
+          y: e.clientY,
+        }
+      );
+
+      domElement.setPointerCapture?.(
+        e.pointerId
+      );
 
       if (this._pointers.size === 1) {
-        this._pointerDownInfo = { x: e.clientX, y: e.clientY, time: performance.now() };
-        const ndc = toNDC(e.clientX, e.clientY);
+        this._pointerDownInfo = {
+          x: e.clientX,
+          y: e.clientY,
+          time: performance.now(),
+        };
+
+        const ndc =
+          toNDC(
+            e.clientX,
+            e.clientY
+          );
+
         const camera = getCamera();
+
         if (!camera) return;
-        const hitId = this.raycastForObject(ndc.x, ndc.y, camera);
+
+        const hitId =
+          this.raycastForObject(
+            ndc.x,
+            ndc.y,
+            camera
+          );
+
         if (hitId != null) {
           this.selectObject(hitId);
-          this._beginDrag(ndc, camera, false);
-        } else if (this.moveModeActive && this.getSelected()) {
-          this._beginDrag(ndc, camera, true);
+
+          this._beginDrag(
+            ndc,
+            camera,
+            false
+          );
+        } else if (
+          this.moveModeActive &&
+          this.getSelected()
+        ) {
+          this._beginDrag(
+            ndc,
+            camera,
+            true
+          );
         } else {
           this._dragging = false;
         }
-      } else if (this._pointers.size === 2) {
+      } else if (
+        this._pointers.size === 2
+      ) {
         this._dragging = false;
-        const pts = Array.from(this._pointers.values());
-        this._pinchStart = this._computePinchState(pts);
-        const rec = this.getSelected();
+
+        const pts =
+          Array.from(
+            this._pointers.values()
+          );
+
+        this._pinchStart =
+          this._computePinchState(
+            pts
+          );
+
+        const rec =
+          this.getSelected();
+
         if (rec) {
-          this._pinchStart.startScale = rec.group.scale.x;
-          this._pinchStart.startRotationY = rec.group.rotation.y;
+          this._pinchStart.startScale =
+            rec.group.scale.x;
+
+          this._pinchStart.startRotationY =
+            rec.group.rotation.y;
         }
       }
     };
 
     const onPointerMove = (e) => {
-      if (!this._pointers.has(e.pointerId)) return;
-      this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (
+        !this._pointers.has(
+          e.pointerId
+        )
+      ) {
+        return;
+      }
 
-      if (this._pointers.size === 1 && this._dragging) {
-        const ndc = toNDC(e.clientX, e.clientY);
+      this._pointers.set(
+        e.pointerId,
+        {
+          x: e.clientX,
+          y: e.clientY,
+        }
+      );
+
+      if (
+        this._pointers.size === 1 &&
+        this._dragging
+      ) {
+        const ndc =
+          toNDC(
+            e.clientX,
+            e.clientY
+          );
+
         const camera = getCamera();
+
         if (!camera) return;
-        this._continueDrag(ndc, camera);
-      } else if (this._pointers.size === 2 && this._pinchStart) {
-        const rec = this.getSelected();
-        if (!rec) return;
-        const pts = Array.from(this._pointers.values());
-        const now = this._computePinchState(pts);
-        const scaleFactor = now.distance / this._pinchStart.distance;
-        const target = THREE.MathUtils.clamp(
-          this._pinchStart.startScale * scaleFactor,
-          APP_CONFIG.minScale,
-          APP_CONFIG.maxScale
+
+        this._continueDrag(
+          ndc,
+          camera
         );
-        rec.group.scale.setScalar(target);
-        const angleDelta = now.angle - this._pinchStart.angle;
-        rec.group.rotation.y = this._pinchStart.startRotationY + angleDelta;
-        this._emit('selectionChange', rec);
+      } else if (
+        this._pointers.size === 2 &&
+        this._pinchStart
+      ) {
+        const rec =
+          this.getSelected();
+
+        if (!rec) return;
+
+        const pts =
+          Array.from(
+            this._pointers.values()
+          );
+
+        const now =
+          this._computePinchState(
+            pts
+          );
+
+        const scaleFactor =
+          now.distance /
+          this._pinchStart.distance;
+
+        const target =
+          THREE.MathUtils.clamp(
+            this._pinchStart.startScale *
+              scaleFactor,
+            APP_CONFIG.minScale,
+            APP_CONFIG.maxScale
+          );
+
+        rec.group.scale.setScalar(
+          target
+        );
+
+        const angleDelta =
+          now.angle -
+          this._pinchStart.angle;
+
+        rec.group.rotation.y =
+          this._pinchStart.startRotationY +
+          angleDelta;
+
+        this._emit(
+          'selectionChange',
+          rec
+        );
       }
     };
 
@@ -323,79 +659,212 @@ export class InteractionManager {
         this._pointers.size === 1 &&
         this._pointerDownInfo &&
         !this._dragging &&
-        performance.now() - this._pointerDownInfo.time < this._tapTimeThreshold &&
-        Math.hypot(e.clientX - this._pointerDownInfo.x, e.clientY - this._pointerDownInfo.y) < this._tapMoveThreshold;
+        performance.now() -
+          this._pointerDownInfo.time <
+          this._tapTimeThreshold &&
+        Math.hypot(
+          e.clientX -
+            this._pointerDownInfo.x,
+          e.clientY -
+            this._pointerDownInfo.y
+        ) <
+          this._tapMoveThreshold;
 
-      this._pointers.delete(e.pointerId);
-      domElement.releasePointerCapture?.(e.pointerId);
+      this._pointers.delete(
+        e.pointerId
+      );
 
-      if (this._pointers.size < 2) this._pinchStart = null;
-      if (this._pointers.size === 0) {
+      domElement.releasePointerCapture?.(
+        e.pointerId
+      );
+
+      if (
+        this._pointers.size < 2
+      ) {
+        this._pinchStart = null;
+      }
+
+      if (
+        this._pointers.size === 0
+      ) {
         this._dragging = false;
+
         if (wasSinglePointerTap) {
-          const ndc = toNDC(e.clientX, e.clientY);
+          const ndc =
+            toNDC(
+              e.clientX,
+              e.clientY
+            );
+
           const camera = getCamera();
+
           if (camera) {
-            const hitId = this.raycastForObject(ndc.x, ndc.y, camera);
+            const hitId =
+              this.raycastForObject(
+                ndc.x,
+                ndc.y,
+                camera
+              );
+
             if (hitId != null) {
-              this.selectObject(hitId);
+              this.selectObject(
+                hitId
+              );
             } else {
-              onEmptyTap?.(ndc.x, ndc.y);
+              onEmptyTap?.(
+                ndc.x,
+                ndc.y
+              );
             }
           }
         }
       }
     };
 
-    domElement.addEventListener('pointerdown', onPointerDown);
-    domElement.addEventListener('pointermove', onPointerMove);
-    domElement.addEventListener('pointerup', onPointerUp);
-    domElement.addEventListener('pointercancel', onPointerUp);
+    domElement.addEventListener(
+      'pointerdown',
+      onPointerDown
+    );
 
-    // Return a detach function in case a caller ever needs to swap surfaces.
+    domElement.addEventListener(
+      'pointermove',
+      onPointerMove
+    );
+
+    domElement.addEventListener(
+      'pointerup',
+      onPointerUp
+    );
+
+    domElement.addEventListener(
+      'pointercancel',
+      onPointerUp
+    );
+
+    // Return detach function
     return () => {
-      domElement.removeEventListener('pointerdown', onPointerDown);
-      domElement.removeEventListener('pointermove', onPointerMove);
-      domElement.removeEventListener('pointerup', onPointerUp);
-      domElement.removeEventListener('pointercancel', onPointerUp);
+      domElement.removeEventListener(
+        'pointerdown',
+        onPointerDown
+      );
+
+      domElement.removeEventListener(
+        'pointermove',
+        onPointerMove
+      );
+
+      domElement.removeEventListener(
+        'pointerup',
+        onPointerUp
+      );
+
+      domElement.removeEventListener(
+        'pointercancel',
+        onPointerUp
+      );
     };
   }
+
+  // --------------------------------------------------------------------
+  // Pinch state
+  // --------------------------------------------------------------------
 
   _computePinchState(pts) {
     const [a, b] = pts;
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
+
+    const dx =
+      b.x - a.x;
+
+    const dy =
+      b.y - a.y;
+
     return {
-      distance: Math.hypot(dx, dy),
-      angle: Math.atan2(dy, dx),
+      distance:
+        Math.hypot(dx, dy),
+
+      angle:
+        Math.atan2(dy, dx),
     };
   }
 
-  _beginDrag(ndc, camera, followTouchDirectly) {
-    const rec = this.getSelected();
+  // --------------------------------------------------------------------
+  // Dragging
+  // --------------------------------------------------------------------
+
+  _beginDrag(
+    ndc,
+    camera,
+    followTouchDirectly
+  ) {
+    const rec =
+      this.getSelected();
+
     if (!rec) return;
+
     this._dragPlane.setFromNormalAndCoplanarPoint(
       new THREE.Vector3(0, 1, 0),
       rec.group.position
     );
-    this._raycaster.setFromCamera(ndc, camera);
-    const hit = new THREE.Vector3();
-    if (this._raycaster.ray.intersectPlane(this._dragPlane, hit)) {
+
+    this._raycaster.setFromCamera(
+      ndc,
+      camera
+    );
+
+    const hit =
+      new THREE.Vector3();
+
+    if (
+      this._raycaster.ray.intersectPlane(
+        this._dragPlane,
+        hit
+      )
+    ) {
       this._dragOffset.copy(
-        followTouchDirectly ? new THREE.Vector3(0, 0, 0) : rec.group.position.clone().sub(hit)
+        followTouchDirectly
+          ? new THREE.Vector3(0, 0, 0)
+          : rec.group.position
+              .clone()
+              .sub(hit)
       );
+
       this._dragging = true;
     }
   }
 
-  _continueDrag(ndc, camera) {
-    const rec = this.getSelected();
+  _continueDrag(
+    ndc,
+    camera
+  ) {
+    const rec =
+      this.getSelected();
+
     if (!rec) return;
-    this._raycaster.setFromCamera(ndc, camera);
-    const hit = new THREE.Vector3();
-    if (this._raycaster.ray.intersectPlane(this._dragPlane, hit)) {
-      rec.group.position.copy(hit.add(this._dragOffset));
-      this._emit('selectionChange', rec);
+
+    this._raycaster.setFromCamera(
+      ndc,
+      camera
+    );
+
+    const hit =
+      new THREE.Vector3();
+
+    if (
+      this._raycaster.ray.intersectPlane(
+        this._dragPlane,
+        hit
+      )
+    ) {
+      rec.group.position.copy(
+        hit.add(
+          this._dragOffset
+        )
+      );
+
+      this._emit(
+        'selectionChange',
+        rec
+      );
     }
   }
 }
