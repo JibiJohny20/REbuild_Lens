@@ -145,7 +145,7 @@ window.addEventListener('resize', () => {
 
 const ui = new UIManager();
 
-const modelManager = new ModelManager();
+const modelManager = new ModelManager(scene);
 
 const interaction = new InteractionManager(
   scene,
