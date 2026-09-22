@@ -62,33 +62,24 @@ export class InteractionManager {
   // Placement
   // --------------------------------------------------------------------
 
-  async placeModel(
-    modelId,
-    position,
-    quaternion = new THREE.Quaternion()
-  ) {
-    let wrapper;
+async placeModel(modelId, position, quaternion = new THREE.Quaternion()) {
+  let wrapper;
 
-    try {
-      // FIX:
-      // createInstance() loads and creates a NEW model.
-      // getInstance() is only for retrieving an already placed instance.
-      wrapper = await this.modelManager.createInstance(modelId);
-    } catch (err) {
-      console.error('Failed to create model:', err);
+  try {
+    wrapper = await this.modelManager.createInstance(modelId);
+  } catch (err) {
+    console.error('Failed to create model:', err);
 
-      this._emit(
-        'loadError',
-        err.message || String(err)
-      );
+    this._emit(
+      'loadError',
+      err.message || String(err)
+    );
 
-      return null;
-    }
+    return null;
+  }
 
-    wrapper.position.copy(position);
-    wrapper.quaternion.copy(quaternion);
-
-    this.scene.add(wrapper);
+  wrapper.position.copy(position);
+  wrapper.quaternion.copy(quaternion);
 
     const id = nextId++;
 
