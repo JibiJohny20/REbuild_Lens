@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Structure AR — Construction Visualization</title>
+<meta name="description" content="Visualize construction components — doors, windows, beams, slabs, planks and bricks — in your real environment using WebAR." />
+<link rel="stylesheet" href="css/style.css" />
+
+<!-- Import map so js/*.js can `import * as THREE from 'three'` without a
+     build step. Pinned versions — update both lines together if you bump
+     the Three.js version. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="app" class="mode-landing">
+
+  <!-- ============================================================ -->
+  <!-- 3D viewport: Three.js attaches its <canvas> inside this div.  -->
+  <!-- ============================================================ -->
+  <div id="viewport"></div>
+
+  <!-- ============================================================ -->
+  <!-- Landing screen                                                -->
+  <!-- ============================================================ -->
+  <section id="screen-landing" class="screen">
+    <div class="landing-card">
+      <p class="landing-eyebrow">WebAR · Construction Visualization</p>
+      <h1>Structure AR</h1>
+      <p class="landing-tagline">Visualize construction components in your own space, right from your browser.</p>
+
+      <div class="landing-actions">
+        <button id="btn-start-ar" class="btn btn-primary btn-large">Start AR</button>
+        <button id="btn-3d-preview" class="btn btn-secondary btn-large">3D Preview</button>
+        <button id="btn-help" class="btn btn-ghost btn-large">Help</button>
+      </div>
+
+      <div id="ar-support-note" class="landing-note" hidden></div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Help screen                                                   -->
+  <!-- ============================================================ -->
+  <section id="screen-help" class="screen" hidden>
+    <div class="help-card">
+      <h2>How to use</h2>
+      <ol class="help-steps">
+        <li>Tap <strong>Start AR</strong>.</li>
+        <li>Allow camera access when prompted.</li>
+        <li>Move your phone slowly to detect a surface.</li>
+        <li>Select a construction component from the bottom bar.</li>
+        <li>Tap the detected surface to place it.</li>
+        <li>Tap a placed component to select it.</li>
+        <li>Move, rotate, scale, duplicate or delete it.</li>
+        <li>Add multiple components to build the structure.</li>
+      </ol>
+      <p class="help-note">No AR-capable device? Use <strong>3D Preview</strong> to try the same tools with your mouse or finger, orbiting a virtual scene instead of your camera.</p>
+      <button id="btn-help-close" class="btn btn-primary btn-large">Close</button>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- Shared AR / Preview overlay. This exact element is passed to  -->
+  <!-- WebXR as the dom-overlay root, and reused unmodified for the  -->
+  <!-- non-AR 3D Preview mode so both modes share one UI/interaction -->
+  <!-- surface.                                                      -->
+  <!-- ============================================================ -->
+  <div id="app-overlay" hidden>
+
+    <!-- Full-screen transparent hit surface. Gestures (tap / drag /  -->
+    <!-- rotate / pinch) bind here. Actual UI controls sit above it   -->
+    <!-- as siblings, so taps on a button never reach the catcher.    -->
+    <div id="gesture-catcher"></div>
+
+    <div id="mode-label" class="mode-label"></div>
+
+    <div id="topbar">
+      <button id="btn-exit" class="btn btn-chip">Exit</button>
+      <button id="btn-help-toggle" class="btn btn-chip">Help</button>
+    </div>
+
+    <div id="instruction-banner" class="instruction-banner" hidden></div>
+
+    <div id="loading-indicator" class="loading-indicator" hidden>
+      <div class="spinner"></div>
+      <span id="loading-text">Loading model…</span>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Contextual selection panel -->
+    <div id="selection-panel" class="selection-panel" hidden>
+      <div class="selection-header">
+        <div>
+          <div id="sel-name" class="sel-name">—</div>
+          <div id="sel-type" class="sel-type">—</div>
+        </div>
+        <button id="btn-panel-close" class="btn-icon" aria-label="Deselect">✕</button>
+      </div>
+
+      <div class="selection-info">
+        <div class="info-row"><span>Position</span><span id="sel-position">—</span></div>
+        <div class="info-row"><span>Rotation</span><span id="sel-rotation">—</span></div>
+        <div class="info-row"><span>Scale</span><span id="sel-scale">—</span></div>
+      </div>
+
+      <div class="selection-actions">
+        <button id="btn-move" class="btn btn-action" data-toggle="true">Move</button>
+        <button id="btn-rotate" class="btn btn-action">Rotate</button>
+        <button id="btn-scale-up" class="btn btn-action">Scale +</button>
+        <button id="btn-scale-down" class="btn btn-action">Scale −</button>
+        <button id="btn-duplicate" class="btn btn-action">Duplicate</button>
+        <button id="btn-reset" class="btn btn-action">Reset</button>
+        <button id="btn-delete" class="btn btn-action btn-danger">Delete</button>
+      </div>
+    </div>
+
+    <!-- Bottom component toolbar -->
+    <div id="toolbar-wrap">
+      <div id="toolbar" class="toolbar"></div>
+      <div class="toolbar-secondary">
+        <button id="btn-add-brick" class="btn btn-chip" hidden>+ Add Brick</button>
+        <button id="btn-clear-scene" class="btn btn-chip btn-danger-outline">Clear Scene</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Generic confirmation modal (delete / clear scene)             -->
+  <!-- ============================================================ -->
+  <div id="confirm-modal" class="modal" hidden>
+    <div class="modal-card">
+      <p id="confirm-message">Are you sure?</p>
+      <div class="modal-actions">
+        <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-ok" class="btn btn-danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- AR-unsupported modal                                          -->
+  <!-- ============================================================ -->
+  <div id="unsupported-modal" class="modal" hidden>
+    <div class="modal-card">
+      <p>AR is not supported on this device/browser.</p>
+      <div class="modal-actions">
+        <button id="unsupported-preview" class="btn btn-primary">Open 3D Preview</button>
+        <button id="unsupported-close" class="btn btn-secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
