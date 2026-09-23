@@ -171,6 +171,10 @@ export class ModelManager {
 
       originalRotation:
         instance.rotation.clone(),
+
+      // Quantity of this material/object, surfaced in the selection panel
+      // and persisted by Save/Load. Independent of scale.
+      quantity: 1,
     };
 
     // --------------------------------------------------
@@ -188,6 +192,24 @@ export class ModelManager {
     if (config.yOffset) {
       instance.position.y += config.yOffset;
     }
+
+    // --------------------------------------------------
+    // BASE OFFSET (for surface snapping)
+    // --------------------------------------------------
+    // Distance from the instance's origin down to the lowest point of its
+    // (scaled) bounding box, computed while it still sits at the origin so
+    // this is a pure model-space measurement. placement.js uses this to
+    // push a placed instance out along the detected surface's normal so
+    // its base rests exactly on that surface instead of floating or
+    // clipping through it. Computed once here rather than per-placement
+    // since it only depends on the model/scale, not on where it lands.
+    instance.updateMatrixWorld(true);
+
+    const bounds = new THREE.Box3().setFromObject(instance);
+
+    instance.userData.baseOffset = bounds.isEmpty()
+      ? 0
+      : -bounds.min.y;
 
     // --------------------------------------------------
     // ADD MODEL TO SCENE

@@ -48,6 +48,14 @@ export class UIManager {
       btnExit: document.getElementById('btn-exit'),
       btnHelpToggle: document.getElementById('btn-help-toggle'),
 
+      // History (Undo/Redo) — see chat summary: no working backend yet,
+      // buttons ship disabled.
+      btnUndo: document.getElementById('btn-undo'),
+      btnRedo: document.getElementById('btn-redo'),
+
+      // Snap to Surface toggle
+      btnSnapToggle: document.getElementById('btn-snap-toggle'),
+
       instructionBanner:
         document.getElementById('instruction-banner'),
 
@@ -66,6 +74,21 @@ export class UIManager {
 
       btnAddBrick:
         document.getElementById('btn-add-brick'),
+
+      brickQuantityChip:
+        document.getElementById('brick-quantity-chip'),
+
+      brickQuantityCount:
+        document.getElementById('brick-quantity-count'),
+
+      btnCamera:
+        document.getElementById('btn-camera'),
+
+      btnSaveProject:
+        document.getElementById('btn-save-project'),
+
+      btnLoadProject:
+        document.getElementById('btn-load-project'),
 
       btnClearScene:
         document.getElementById('btn-clear-scene'),
@@ -112,6 +135,18 @@ export class UIManager {
 
       btnDelete:
         document.getElementById('btn-delete'),
+
+      angleGroup:
+        document.getElementById('angle-group'),
+
+      selQuantity:
+        document.getElementById('sel-quantity'),
+
+      btnQtyDown:
+        document.getElementById('btn-qty-down'),
+
+      btnQtyUp:
+        document.getElementById('btn-qty-up'),
 
       // Confirmation modal
       confirmModal:
@@ -486,6 +521,78 @@ export class UIManager {
 
     this.el.selScale.textContent =
       `${group.scale.x.toFixed(2)}×`;
+
+    // Quantity comes straight from the existing userData.quantity field
+    // set in model-manager.js:createInstance (defaults to 1). Nothing else
+    // in the codebase currently reads or writes it besides this display
+    // and the +/- buttons wired in main.js.
+    if (this.el.selQuantity) {
+      const quantity =
+        group.userData?.quantity ?? 1;
+
+      this.el.selQuantity.textContent =
+        String(quantity);
+    }
+  }
+
+  // ==========================================================================
+  // ROTATION ANGLE GROUP
+  // ==========================================================================
+
+  setActiveAngle(deg) {
+
+    if (!this.el.angleGroup) {
+      return;
+    }
+
+    this.el.angleGroup
+      .querySelectorAll('.btn-angle')
+      .forEach((node) => {
+
+        node.classList.toggle(
+          'active',
+          parseFloat(node.dataset.angle) === deg
+        );
+      });
+  }
+
+  // ==========================================================================
+  // SNAP TO SURFACE TOGGLE
+  // ==========================================================================
+
+  setSnapToggleUI(enabled) {
+
+    if (!this.el.btnSnapToggle) {
+      return;
+    }
+
+    this.el.btnSnapToggle.textContent =
+      enabled ? 'Snap: On' : 'Snap: Off';
+
+    this.el.btnSnapToggle.setAttribute(
+      'aria-pressed',
+      String(!!enabled)
+    );
+  }
+
+  // ==========================================================================
+  // BRICK QUANTITY CHIP (toolbar)
+  // ==========================================================================
+
+  updateBrickQuantityChip(count) {
+
+    if (!this.el.brickQuantityChip) {
+      return;
+    }
+
+    this.el.brickQuantityChip.hidden =
+      !count;
+
+    if (this.el.brickQuantityCount) {
+
+      this.el.brickQuantityCount.textContent =
+        String(count);
+    }
   }
 
   // ==========================================================================

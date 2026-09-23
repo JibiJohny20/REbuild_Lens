@@ -9,9 +9,12 @@
 
 import * as THREE from 'three';
 import { MODELS, APP_CONFIG } from './config.js';
-import { ModelManager } from './model-manager.js';
+import { computePlacementTransform } from './placement.js';
 
 let nextId = 1;
+
+// Undo/redo keeps this many snapshots per stack before dropping the oldest.
+const MAX_HISTORY = 50;
 
 export class InteractionManager {
   /**
@@ -43,10 +46,19 @@ export class InteractionManager {
     // drag to start precisely on the model's mesh.
     this.moveModeActive = false;
 
+    // Undo/redo. Snapshot-based (captures the full placed-object list)
+    // rather than per-action inverses, so every mutation type — place,
+    // delete, clear, reset, rotate, scale, move, duplicate, quantity,
+    // load — is undoable through the same mechanism without bespoke
+    // inverse logic per action.
+    this._undoStack = [];
+    this._redoStack = [];
+
     this.listeners = {
       selectionChange: [],
       objectsChange: [],
       loadError: [],
+      historyChange: [],
     };
   }
 
@@ -62,7 +74,19 @@ export class InteractionManager {
   // Placement
   // --------------------------------------------------------------------
 
-async placeModel(modelId, position, quaternion = new THREE.Quaternion()) {
+/**
+   * @param {string} modelId
+   * @param {THREE.Vector3} position - raw hit position (surface hit point).
+   * @param {THREE.Quaternion} quaternion - raw hit orientation.
+   * @param {{snapToSurface?: boolean, cameraForward?: THREE.Vector3|null}} [options]
+   *   snapToSurface: when true, run the raw hit through placement.js's
+   *   computePlacementTransform so the object's base rests exactly on the
+   *   detected surface and upright models (door/window) never inherit a
+   *   tilted hit-test normal. When false, the raw hit pose is used as-is.
+   */
+async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options = {}) {
+  const { snapToSurface = false, cameraForward = null } = options;
+
   let wrapper;
 
   try {
@@ -78,8 +102,27 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion()) {
     return null;
   }
 
-  wrapper.position.copy(position);
-  wrapper.quaternion.copy(quaternion);
+  // Snapshot the pre-placement state so this placement can be undone.
+  this._pushUndoSnapshot();
+
+  let finalPosition = position;
+  let finalQuaternion = quaternion;
+
+  if (snapToSurface) {
+    const transform = computePlacementTransform(
+      modelId,
+      position,
+      quaternion,
+      wrapper.userData.baseOffset || 0,
+      cameraForward
+    );
+
+    finalPosition = transform.position;
+    finalQuaternion = transform.quaternion;
+  }
+
+  wrapper.position.copy(finalPosition);
+  wrapper.quaternion.copy(finalQuaternion);
 
     const id = nextId++;
 
@@ -88,8 +131,8 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion()) {
       modelId,
       group: wrapper,
       original: {
-        position: position.clone(),
-        quaternion: quaternion.clone(),
+        position: finalPosition.clone(),
+        quaternion: finalQuaternion.clone(),
         scale: wrapper.scale.clone(),
       },
     };

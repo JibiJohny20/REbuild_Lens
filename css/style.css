@@ -545,7 +545,19 @@ button {
 
   justify-content: space-between;
 
+  gap: 8px;
+
   pointer-events: none;
+}
+
+.topbar-group {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  flex-wrap: wrap;
 }
 
 #topbar .btn {
@@ -554,6 +566,20 @@ button {
   z-index: 301;
 
   pointer-events: auto;
+}
+
+#topbar .btn:disabled {
+  opacity: 0.45;
+
+  cursor: not-allowed;
+}
+
+#btn-snap-toggle[aria-pressed="true"] {
+  background: var(--blue);
+
+  color: #fff;
+
+  border-color: var(--blue);
 }
 
 /* ============================================================================
@@ -772,6 +798,68 @@ button {
   font-weight: 600;
 }
 
+.qty-stepper {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  font-variant-numeric: tabular-nums;
+
+  color: var(--ink);
+
+  font-weight: 600;
+}
+
+.qty-stepper .btn-icon {
+  width: 26px;
+
+  height: 26px;
+
+  font-size: 0.85rem;
+
+  background: var(--paper);
+
+  border: 1.5px solid var(--line);
+}
+
+.angle-group {
+  display: grid;
+
+  grid-template-columns: repeat(4, 1fr);
+
+  gap: 8px;
+
+  margin-bottom: 8px;
+}
+
+.btn-angle {
+  padding: 8px 4px;
+
+  background: var(--paper);
+
+  color: var(--ink-soft);
+
+  border: 1.5px solid var(--line);
+
+  border-radius: var(--radius-sm, 10px);
+
+  font-size: 0.78rem;
+
+  min-height: 38px;
+}
+
+.btn-angle.active {
+  background: var(--blue-tint);
+
+  color: var(--blue-dark);
+
+  border-color: var(--blue);
+
+  font-weight: 700;
+}
+
 .selection-actions {
   display: grid;
 
@@ -895,6 +983,8 @@ button {
 
   justify-content: center;
 
+  flex-wrap: wrap;
+
   gap: 10px;
 
   pointer-events: auto;
@@ -904,6 +994,16 @@ button {
   position: relative;
 
   z-index: 602;
+}
+
+.qty-chip {
+  display: inline-flex;
+
+  align-items: center;
+
+  font-variant-numeric: tabular-nums;
+
+  cursor: default;
 }
 
 /* ============================================================================
