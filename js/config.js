@@ -180,3 +180,10 @@ export const ROTATE_STEP_OPTIONS_DEG = [15, 22.5, 45, 90];
 
 // localStorage key used by Save Project / Load Project.
 export const PROJECT_STORAGE_KEY = 'structure-ar-project-v1';
+
+// Collision detection settings, consumed by interaction-manager.js.
+// clearanceMargin -> distance (meters) below which two non-overlapping
+// objects are flagged with the orange "insufficient clearance" warning.
+export const COLLISION_CONFIG = {
+  clearanceMargin: 0.02,
+};
