@@ -103,12 +103,8 @@ export function computePlacementTransform(
   return { position, quaternion, surfaceType };
 }
 
-/**
- * Re-orients an ALREADY-PLACED upright object around the vertical axis
- * only (used by the Rotate button), so a door/window can never be spun
- * into lying flat by manual rotation. Non-upright objects rotate freely
- * about whatever axis the caller passes in.
- */
-export function isUprightModel(modelId) {
-  return !!MODELS[modelId]?.upright;
-}
+// Note: the Rotate button (InteractionManager.rotateSelected) already only
+// ever calls group.rotateY(...) — since an upright object's quaternion is
+// always built from setFromAxisAngle(WORLD_UP, yaw) above, its local Y
+// stays equal to world Y forever, so rotateY can never spin it into lying
+// flat. No separate "is this model upright" check is needed at rotate time.

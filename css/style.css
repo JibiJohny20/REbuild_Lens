@@ -545,19 +545,7 @@ button {
 
   justify-content: space-between;
 
-  gap: 8px;
-
   pointer-events: none;
-}
-
-.topbar-group {
-  display: flex;
-
-  align-items: center;
-
-  gap: 8px;
-
-  flex-wrap: wrap;
 }
 
 #topbar .btn {
@@ -566,20 +554,6 @@ button {
   z-index: 301;
 
   pointer-events: auto;
-}
-
-#topbar .btn:disabled {
-  opacity: 0.45;
-
-  cursor: not-allowed;
-}
-
-#btn-snap-toggle[aria-pressed="true"] {
-  background: var(--blue);
-
-  color: #fff;
-
-  border-color: var(--blue);
 }
 
 /* ============================================================================
@@ -798,68 +772,6 @@ button {
   font-weight: 600;
 }
 
-.qty-stepper {
-  display: flex;
-
-  align-items: center;
-
-  gap: 8px;
-
-  font-variant-numeric: tabular-nums;
-
-  color: var(--ink);
-
-  font-weight: 600;
-}
-
-.qty-stepper .btn-icon {
-  width: 26px;
-
-  height: 26px;
-
-  font-size: 0.85rem;
-
-  background: var(--paper);
-
-  border: 1.5px solid var(--line);
-}
-
-.angle-group {
-  display: grid;
-
-  grid-template-columns: repeat(4, 1fr);
-
-  gap: 8px;
-
-  margin-bottom: 8px;
-}
-
-.btn-angle {
-  padding: 8px 4px;
-
-  background: var(--paper);
-
-  color: var(--ink-soft);
-
-  border: 1.5px solid var(--line);
-
-  border-radius: var(--radius-sm, 10px);
-
-  font-size: 0.78rem;
-
-  min-height: 38px;
-}
-
-.btn-angle.active {
-  background: var(--blue-tint);
-
-  color: var(--blue-dark);
-
-  border-color: var(--blue);
-
-  font-weight: 700;
-}
-
 .selection-actions {
   display: grid;
 
@@ -983,8 +895,6 @@ button {
 
   justify-content: center;
 
-  flex-wrap: wrap;
-
   gap: 10px;
 
   pointer-events: auto;
@@ -994,16 +904,6 @@ button {
   position: relative;
 
   z-index: 602;
-}
-
-.qty-chip {
-  display: inline-flex;
-
-  align-items: center;
-
-  font-variant-numeric: tabular-nums;
-
-  cursor: default;
 }
 
 /* ============================================================================
@@ -1176,4 +1076,240 @@ button {
 
     transition-duration: 0.01ms !important;
   }
+}
+/* ============================================================================
+   RECORDING INDICATOR
+   ============================================================================ */
+
+.recording-indicator {
+  position: absolute;
+
+  top: calc(64px + var(--safe-top));
+
+  left: 50%;
+
+  transform: translateX(-50%);
+
+  z-index: 400;
+
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 8px 14px;
+
+  background: rgba(20, 24, 30, 0.72);
+
+  color: #fff;
+
+  border-radius: 999px;
+
+  font-size: 0.82rem;
+
+  font-variant-numeric: tabular-nums;
+
+  pointer-events: none;
+}
+
+.rec-dot {
+  width: 9px;
+
+  height: 9px;
+
+  border-radius: 50%;
+
+  background: #e0392b;
+
+  animation: rec-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes rec-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+/* ============================================================================
+   WILL IT FIT? PANEL
+   ============================================================================ */
+
+/* #fit-panel is the fixed, full-screen dimmer + centering flex container.
+   Its two direct children (.fit-panel-header, .fit-panel-body) are styled
+   together as one visual card stacked in a column. */
+#fit-panel {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 6000;
+
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  justify-content: center;
+
+  padding: 20px 14px calc(20px + var(--safe-bottom));
+
+  background: rgba(20, 24, 30, 0.45);
+
+  pointer-events: auto;
+}
+
+#fit-panel > .fit-panel-header,
+#fit-panel > .fit-panel-body {
+  width: 100%;
+
+  max-width: 420px;
+
+  background: var(--paper-raised);
+
+  border: 1px solid var(--line);
+
+  box-shadow: var(--shadow-card);
+
+  padding: 14px 18px;
+}
+
+#fit-panel > .fit-panel-header {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+
+  border-bottom: none;
+}
+
+#fit-panel > .fit-panel-header h3 {
+  margin: 0;
+
+  font-size: 1.05rem;
+
+  color: var(--ink);
+}
+
+#fit-panel > .fit-panel-body {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 10px;
+
+  max-height: 65vh;
+
+  overflow-y: auto;
+
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+
+.fit-object-name {
+  margin: 0;
+
+  font-weight: 600;
+
+  color: var(--ink);
+}
+
+.fit-dimensions {
+  font-size: 0.82rem;
+
+  color: var(--ink-soft);
+}
+
+.fit-measure-row {
+  display: flex;
+
+  gap: 8px;
+}
+
+.fit-measure-row .btn-action {
+  flex: 1;
+}
+
+.fit-opening-readout {
+  background: var(--paper);
+
+  border: 1px solid var(--line);
+
+  border-radius: var(--radius-sm);
+
+  padding: 8px 12px;
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+.fit-estimate-note {
+  margin: 0;
+
+  font-size: 0.72rem;
+
+  color: var(--ink-faint);
+
+  font-style: italic;
+}
+
+.fit-result {
+  border-radius: var(--radius-sm);
+
+  padding: 10px 12px;
+
+  border: 1.5px solid var(--line);
+
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+.fit-result.fit-ok {
+  background: #e8f5ec;
+
+  border-color: #3f9e5f;
+}
+
+.fit-result.fit-bad {
+  background: var(--danger-tint);
+
+  border-color: var(--danger);
+}
+
+.fit-result.fit-uncertain {
+  background: #fff6df;
+
+  border-color: #c99a2e;
+}
+
+.fit-result-headline {
+  font-weight: 700;
+
+  font-size: 0.98rem;
+
+  color: var(--ink);
+}
+
+.fit-result-detail {
+  font-size: 0.8rem;
+
+  color: var(--ink-soft);
+}
+
+.fit-actions {
+  display: flex;
+
+  gap: 8px;
+}
+
+.fit-actions .btn {
+  flex: 1;
 }

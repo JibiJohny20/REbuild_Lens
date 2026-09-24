@@ -171,10 +171,6 @@ export class ModelManager {
 
       originalRotation:
         instance.rotation.clone(),
-
-      // Quantity of this material/object, surfaced in the selection panel
-      // and persisted by Save/Load. Independent of scale.
-      quantity: 1,
     };
 
     // --------------------------------------------------
@@ -186,7 +182,7 @@ export class ModelManager {
     instance.scale.setScalar(scale);
 
     // --------------------------------------------------
-    // Y OFFSET
+    // Y OFFSET (manual fine-tune, see config.js)
     // --------------------------------------------------
 
     if (config.yOffset) {
@@ -194,15 +190,16 @@ export class ModelManager {
     }
 
     // --------------------------------------------------
-    // BASE OFFSET (for surface snapping)
+    // BASE OFFSET (for surface-aware placement)
     // --------------------------------------------------
     // Distance from the instance's origin down to the lowest point of its
-    // (scaled) bounding box, computed while it still sits at the origin so
-    // this is a pure model-space measurement. placement.js uses this to
-    // push a placed instance out along the detected surface's normal so
-    // its base rests exactly on that surface instead of floating or
-    // clipping through it. Computed once here rather than per-placement
-    // since it only depends on the model/scale, not on where it lands.
+    // (scaled) bounding box, measured while it still sits at the origin so
+    // this is a pure model-space value. placement.js uses this to push a
+    // placed instance out along the detected surface's normal so its base
+    // rests exactly on that surface instead of floating above it or
+    // clipping through it — this is also part of the door-orientation fix,
+    // since without it an upright door was landing with its center (not
+    // its bottom edge) at the hit-test point.
     instance.updateMatrixWorld(true);
 
     const bounds = new THREE.Box3().setFromObject(instance);

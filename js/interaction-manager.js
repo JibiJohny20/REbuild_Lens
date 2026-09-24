@@ -8,13 +8,12 @@
 // ============================================================================
 
 import * as THREE from 'three';
-import { MODELS, APP_CONFIG } from './config.js';
+import { MODELS, APP_CONFIG, COLLISION_CONFIG } from './config.js';
+import { ModelManager } from './model-manager.js';
 import { computePlacementTransform } from './placement.js';
+import { checkCollisions as computeCollisions } from './collision.js';
 
 let nextId = 1;
-
-// Undo/redo keeps this many snapshots per stack before dropping the oldest.
-const MAX_HISTORY = 50;
 
 export class InteractionManager {
   /**
@@ -46,20 +45,18 @@ export class InteractionManager {
     // drag to start precisely on the model's mesh.
     this.moveModeActive = false;
 
-    // Undo/redo. Snapshot-based (captures the full placed-object list)
-    // rather than per-action inverses, so every mutation type — place,
-    // delete, clear, reset, rotate, scale, move, duplicate, quantity,
-    // load — is undoable through the same mechanism without bespoke
-    // inverse logic per action.
-    this._undoStack = [];
-    this._redoStack = [];
-
     this.listeners = {
       selectionChange: [],
       objectsChange: [],
       loadError: [],
-      historyChange: [],
+      sceneReset: [],
+      collisionChange: [],
     };
+
+    // Collision state, recomputed on transform-committing actions only
+    // (never per animation frame — see collision.js's header comment).
+    this._collisionIds = new Set();
+    this._warningIds = new Set();
   }
 
   on(event, cb) {
@@ -74,19 +71,11 @@ export class InteractionManager {
   // Placement
   // --------------------------------------------------------------------
 
-/**
-   * @param {string} modelId
-   * @param {THREE.Vector3} position - raw hit position (surface hit point).
-   * @param {THREE.Quaternion} quaternion - raw hit orientation.
-   * @param {{snapToSurface?: boolean, cameraForward?: THREE.Vector3|null}} [options]
-   *   snapToSurface: when true, run the raw hit through placement.js's
-   *   computePlacementTransform so the object's base rests exactly on the
-   *   detected surface and upright models (door/window) never inherit a
-   *   tilted hit-test normal. When false, the raw hit pose is used as-is.
-   */
-async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options = {}) {
-  const { snapToSurface = false, cameraForward = null } = options;
-
+// `hitQuaternion` is the raw pose from AR hit-test (or the synthetic
+// ground-plane pose from preview mode) — its local +Y encodes the
+// detected surface's normal. `cameraForwardHint` is only used for
+// upright objects placed on a floor (see placement.js for why).
+async placeModel(modelId, hitPosition, hitQuaternion = new THREE.Quaternion(), cameraForwardHint = null) {
   let wrapper;
 
   try {
@@ -102,27 +91,31 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
     return null;
   }
 
-  // Snapshot the pre-placement state so this placement can be undone.
-  this._pushUndoSnapshot();
+  const baseOffset = wrapper.userData.baseOffset || 0;
 
-  let finalPosition = position;
-  let finalQuaternion = quaternion;
+  const { position, quaternion, surfaceType } = computePlacementTransform(
+    modelId,
+    hitPosition,
+    hitQuaternion,
+    baseOffset,
+    cameraForwardHint
+  );
 
-  if (snapToSurface) {
-    const transform = computePlacementTransform(
-      modelId,
-      position,
-      quaternion,
-      wrapper.userData.baseOffset || 0,
-      cameraForward
-    );
+  return this._finalizeInstance(modelId, wrapper, position, quaternion, surfaceType);
+}
 
-    finalPosition = transform.position;
-    finalQuaternion = transform.quaternion;
-  }
-
-  wrapper.position.copy(finalPosition);
-  wrapper.quaternion.copy(finalQuaternion);
+  // --------------------------------------------------------------------
+  // Shared bookkeeping once a final world position/quaternion is known.
+  // Used by placeModel() (after running the hit pose through
+  // computePlacementTransform) AND by duplicateSelected() (which already
+  // has an exact, final placed transform and must NOT run it back through
+  // the surface-normal placement math — that math assumes its input is a
+  // raw hit-test pose, and an already-placed object's own quaternion
+  // doesn't carry that meaning).
+  // --------------------------------------------------------------------
+  _finalizeInstance(modelId, wrapper, position, quaternion, surfaceType) {
+    wrapper.position.copy(position);
+    wrapper.quaternion.copy(quaternion);
 
     const id = nextId++;
 
@@ -130,9 +123,10 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
       id,
       modelId,
       group: wrapper,
+      surfaceType,
       original: {
-        position: finalPosition.clone(),
-        quaternion: finalQuaternion.clone(),
+        position: position.clone(),
+        quaternion: quaternion.clone(),
         scale: wrapper.scale.clone(),
       },
     };
@@ -144,6 +138,8 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
     this._emit('objectsChange', this.list());
 
     this.selectObject(id);
+
+    this.checkCollisions();
 
     return record;
   }
@@ -159,11 +155,12 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
   selectObject(id) {
     if (this.selectedId === id) return;
 
-    this._setHighlight(this.selectedId, false);
+    const previous = this.selectedId;
 
     this.selectedId = id;
 
-    this._setHighlight(this.selectedId, true);
+    this._applyVisualState(previous);
+    this._applyVisualState(id);
 
     if (id == null) {
       this.moveModeActive = false;
@@ -192,13 +189,30 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
       : null;
   }
 
-  _setHighlight(id, on) {
+  // --------------------------------------------------------------------
+  // Visual state: selection highlight (blue) and collision tint
+  // (red = actual overlap, orange = insufficient clearance) can apply to
+  // the same object at once. Collision always outranks selection visually
+  // so a colliding object stays obviously flagged even while selected.
+  // --------------------------------------------------------------------
+
+  _applyVisualState(id) {
     const rec =
       id != null
         ? this.objects.get(id)
         : null;
 
     if (!rec) return;
+
+    let color = null;
+
+    if (this._collisionIds.has(id)) {
+      color = 0xd93b2b; // collision
+    } else if (this._warningIds.has(id)) {
+      color = 0xe6a326; // insufficient clearance
+    } else if (this.selectedId === id) {
+      color = 0x2d6cdf; // selected
+    }
 
     rec.group.traverse((node) => {
       if (!node.isMesh) return;
@@ -208,29 +222,46 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
         : [node.material];
 
       mats.forEach((m) => {
-        if (!m) return;
+        if (!m || !m.emissive) return;
 
-        if (on) {
-          if (m.emissive) {
-            m.userData._prevEmissive =
-              m.userData._prevEmissive ??
-              m.emissive.getHex();
+        m.userData._prevEmissive =
+          m.userData._prevEmissive ??
+          m.emissive.getHex();
 
-            m.emissive.set(0x2d6cdf);
-            m.emissiveIntensity = 0.28;
-          }
-        } else if (
-          m.emissive &&
-          m.userData._prevEmissive !== undefined
-        ) {
-          m.emissive.setHex(
-            m.userData._prevEmissive
-          );
-
+        if (color != null) {
+          m.emissive.set(color);
+          m.emissiveIntensity = 0.28;
+        } else {
+          m.emissive.setHex(m.userData._prevEmissive);
           m.emissiveIntensity = 1;
         }
       });
     });
+  }
+
+  // --------------------------------------------------------------------
+  // Collision detection
+  // --------------------------------------------------------------------
+  // Called after any action that commits a new transform (place,
+  // duplicate, move finishes, rotate, scale, delete, clear, reset) — never
+  // from inside a per-frame loop, per the performance requirements.
+  checkCollisions() {
+    const { collisions, warnings } = computeCollisions(
+      this.list(),
+      COLLISION_CONFIG.clearanceMargin
+    );
+
+    this._collisionIds = collisions;
+    this._warningIds = warnings;
+
+    this.list().forEach((rec) => this._applyVisualState(rec.id));
+
+    this._emit('collisionChange', {
+      collisions: [...collisions],
+      warnings: [...warnings],
+    });
+
+    return { collisions, warnings };
   }
 
   // --------------------------------------------------------------------
@@ -319,6 +350,8 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
 
     rec.group.rotateY(radians);
 
+    this.checkCollisions();
+
     this._emit(
       'selectionChange',
       rec
@@ -341,6 +374,8 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
       );
 
     rec.group.scale.setScalar(target);
+
+    this.checkCollisions();
 
     this._emit(
       'selectionChange',
@@ -387,18 +422,30 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
     const quat =
       rec.group.quaternion.clone();
 
-    const dup =
-      await this.placeModel(
-        rec.modelId,
-        pos,
-        quat
-      );
+    let wrapper;
 
-    if (dup) {
-      dup.group.scale.copy(
-        rec.group.scale
-      );
+    try {
+      wrapper = await this.modelManager.createInstance(rec.modelId);
+    } catch (err) {
+      console.error('Failed to duplicate model:', err);
+
+      this._emit('loadError', err.message || String(err));
+
+      return null;
     }
+
+    // Exact transform, already placed — skip computePlacementTransform
+    // (see _finalizeInstance's comment for why).
+    const dup = this._finalizeInstance(
+      rec.modelId,
+      wrapper,
+      pos,
+      quat,
+      rec.surfaceType
+    );
+
+    dup.group.scale.copy(rec.group.scale);
+    dup.original.scale.copy(rec.group.scale);
 
     return dup;
   }
@@ -434,14 +481,37 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
   // Delete
   // --------------------------------------------------------------------
 
+  // ROOT CAUSE (delete / clear-scene / multi-object-deletion bugs):
+  // this used to call `ModelManager.dispose(rec.group)` as if it were a
+  // static method. ModelManager.dispose() is an INSTANCE method with a
+  // completely different job (tear down the whole manager: clear every
+  // instance, wipe the template cache, dispose the Draco decoder) — there
+  // is no static `dispose`. Calling it threw a TypeError immediately.
+  //
+  // Because `this.scene.remove(rec.group)` ran on the line BEFORE the
+  // throw, the object visually vanished, but everything after the crash
+  // never ran: `this.objects.delete(rec.id)` was skipped, so the stale
+  // record stayed in the `objects` Map forever, `selectedId` was never
+  // cleared, and the 'objectsChange'/'selectionChange' events never fired.
+  // The object's mesh/material also never got disposed (leak), and it was
+  // never removed from ModelManager's own `instances` Set either, since
+  // that removal only happens inside the real `removeInstance()` method,
+  // which this code bypassed entirely.
+  //
+  // With object #1's stale record still sitting in the map after the
+  // first "delete", creating more objects and trying to delete THOSE hit
+  // the same crash again — matching "first object deletes, later ones
+  // don't" and "delete works sometimes."
+  //
+  // Fix: route through ModelManager's real instance method, which does
+  // scene removal + instances-Set removal + geometry/material disposal in
+  // one correct place.
   deleteSelected() {
     const rec = this.getSelected();
 
     if (!rec) return;
 
-    this.scene.remove(rec.group);
-
-    ModelManager.dispose(rec.group);
+    this.modelManager.removeInstance(rec.group);
 
     this.objects.delete(rec.id);
 
@@ -462,13 +532,14 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
   // Clear
   // --------------------------------------------------------------------
 
+  // Same root cause as deleteSelected(): the old `ModelManager.dispose()`
+  // call threw on the FIRST object in the loop, which aborted the entire
+  // forEach — so Clear Scene only ever removed one object from the scene
+  // (the first) and never reached `this.objects.clear()`, leaving every
+  // other placed object still visible and still tracked.
   clearAll() {
     this.list().forEach((rec) => {
-      this.scene.remove(rec.group);
-
-      ModelManager.dispose(
-        rec.group
-      );
+      this.modelManager.removeInstance(rec.group);
     });
 
     this.objects.clear();
@@ -484,6 +555,22 @@ async placeModel(modelId, position, quaternion = new THREE.Quaternion(), options
       'objectsChange',
       this.list()
     );
+  }
+
+  // --------------------------------------------------------------------
+  // Reset (whole-scene reset, distinct from Clear Scene)
+  // --------------------------------------------------------------------
+  // "Reset" and "Clear Scene" now do the same underlying cleanup — the
+  // difference is UX only: Clear Scene asks for confirmation first (see
+  // main.js), Reset is an instant "start over" action. Both must leave the
+  // app in exactly the state a fresh page load would: no placed objects,
+  // no selection, no move-mode armed. Fit/measurement UI state is cleared
+  // by main.js in response to the 'sceneReset' event, since that state
+  // lives in FitChecker/MeasurementManager, not here.
+  resetScene() {
+    this.clearAll();
+
+    this._emit('sceneReset');
   }
 
   // --------------------------------------------------------------------

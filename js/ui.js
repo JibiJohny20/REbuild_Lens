@@ -47,14 +47,10 @@ export class UIManager {
 
       btnExit: document.getElementById('btn-exit'),
       btnHelpToggle: document.getElementById('btn-help-toggle'),
+      btnFitToggle: document.getElementById('btn-fit-toggle'),
 
-      // History (Undo/Redo) — see chat summary: no working backend yet,
-      // buttons ship disabled.
-      btnUndo: document.getElementById('btn-undo'),
-      btnRedo: document.getElementById('btn-redo'),
-
-      // Snap to Surface toggle
-      btnSnapToggle: document.getElementById('btn-snap-toggle'),
+      recordingIndicator: document.getElementById('recording-indicator'),
+      recTime: document.getElementById('rec-time'),
 
       instructionBanner:
         document.getElementById('instruction-banner'),
@@ -74,21 +70,6 @@ export class UIManager {
 
       btnAddBrick:
         document.getElementById('btn-add-brick'),
-
-      brickQuantityChip:
-        document.getElementById('brick-quantity-chip'),
-
-      brickQuantityCount:
-        document.getElementById('brick-quantity-count'),
-
-      btnCamera:
-        document.getElementById('btn-camera'),
-
-      btnSaveProject:
-        document.getElementById('btn-save-project'),
-
-      btnLoadProject:
-        document.getElementById('btn-load-project'),
 
       btnClearScene:
         document.getElementById('btn-clear-scene'),
@@ -130,23 +111,20 @@ export class UIManager {
       btnDuplicate:
         document.getElementById('btn-duplicate'),
 
-      btnReset:
-        document.getElementById('btn-reset'),
+      btnResetObject:
+        document.getElementById('btn-reset-object'),
 
       btnDelete:
         document.getElementById('btn-delete'),
 
-      angleGroup:
-        document.getElementById('angle-group'),
+      btnResetScene:
+        document.getElementById('btn-reset-scene'),
 
-      selQuantity:
-        document.getElementById('sel-quantity'),
+      btnPhoto:
+        document.getElementById('btn-photo'),
 
-      btnQtyDown:
-        document.getElementById('btn-qty-down'),
-
-      btnQtyUp:
-        document.getElementById('btn-qty-up'),
+      btnVideo:
+        document.getElementById('btn-video'),
 
       // Confirmation modal
       confirmModal:
@@ -170,6 +148,23 @@ export class UIManager {
 
       unsupportedClose:
         document.getElementById('unsupported-close'),
+
+      // Will It Fit? panel
+      fitPanel: document.getElementById('fit-panel'),
+      btnFitClose: document.getElementById('btn-fit-close'),
+      fitObjectName: document.getElementById('fit-object-name'),
+      fitObjectDims: document.getElementById('fit-object-dims'),
+      btnMeasureWidth: document.getElementById('btn-measure-width'),
+      btnMeasureHeight: document.getElementById('btn-measure-height'),
+      fitOpeningWidth: document.getElementById('fit-opening-width'),
+      fitOpeningHeight: document.getElementById('fit-opening-height'),
+      fitEstimateNote: document.getElementById('fit-estimate-note'),
+      fitResult: document.getElementById('fit-result'),
+      fitResultHeadline: document.getElementById('fit-result-headline'),
+      fitResultDetail: document.getElementById('fit-result-detail'),
+      btnFitRotate: document.getElementById('btn-fit-rotate'),
+      btnCheckFit: document.getElementById('btn-check-fit'),
+      btnFitReset: document.getElementById('btn-fit-reset'),
     };
 
     this._toastTimer = null;
@@ -521,78 +516,6 @@ export class UIManager {
 
     this.el.selScale.textContent =
       `${group.scale.x.toFixed(2)}×`;
-
-    // Quantity comes straight from the existing userData.quantity field
-    // set in model-manager.js:createInstance (defaults to 1). Nothing else
-    // in the codebase currently reads or writes it besides this display
-    // and the +/- buttons wired in main.js.
-    if (this.el.selQuantity) {
-      const quantity =
-        group.userData?.quantity ?? 1;
-
-      this.el.selQuantity.textContent =
-        String(quantity);
-    }
-  }
-
-  // ==========================================================================
-  // ROTATION ANGLE GROUP
-  // ==========================================================================
-
-  setActiveAngle(deg) {
-
-    if (!this.el.angleGroup) {
-      return;
-    }
-
-    this.el.angleGroup
-      .querySelectorAll('.btn-angle')
-      .forEach((node) => {
-
-        node.classList.toggle(
-          'active',
-          parseFloat(node.dataset.angle) === deg
-        );
-      });
-  }
-
-  // ==========================================================================
-  // SNAP TO SURFACE TOGGLE
-  // ==========================================================================
-
-  setSnapToggleUI(enabled) {
-
-    if (!this.el.btnSnapToggle) {
-      return;
-    }
-
-    this.el.btnSnapToggle.textContent =
-      enabled ? 'Snap: On' : 'Snap: Off';
-
-    this.el.btnSnapToggle.setAttribute(
-      'aria-pressed',
-      String(!!enabled)
-    );
-  }
-
-  // ==========================================================================
-  // BRICK QUANTITY CHIP (toolbar)
-  // ==========================================================================
-
-  updateBrickQuantityChip(count) {
-
-    if (!this.el.brickQuantityChip) {
-      return;
-    }
-
-    this.el.brickQuantityChip.hidden =
-      !count;
-
-    if (this.el.brickQuantityCount) {
-
-      this.el.brickQuantityCount.textContent =
-        String(count);
-    }
   }
 
   // ==========================================================================
@@ -702,4 +625,115 @@ export class UIManager {
         '';
     }
   }
+
+  // ==========================================================================
+  // WILL IT FIT? PANEL
+  // ==========================================================================
+
+  showFitPanel(show) {
+    if (!this.el.fitPanel) return;
+    this.el.fitPanel.hidden = !show;
+  }
+
+  isFitPanelOpen() {
+    return !!this.el.fitPanel && !this.el.fitPanel.hidden;
+  }
+
+  /** @param {{name:string,type:string,dimensions:{width:number,height:number,depth:number}}|null} record */
+  updateFitTarget(record) {
+    if (!this.el.fitObjectName) return;
+
+    if (!record) {
+      this.el.fitObjectName.textContent = 'Select a component to check.';
+      this.el.fitObjectDims.textContent = '—';
+      return;
+    }
+
+    this.el.fitObjectName.textContent = record.name;
+
+    const d = record.dimensions;
+    this.el.fitObjectDims.textContent = d
+      ? `Width: ${d.width.toFixed(2)} m · Height: ${d.height.toFixed(2)} m · Depth: ${d.depth.toFixed(2)} m`
+      : 'No dimension data for this component.';
+  }
+
+  updateFitOpening(opening) {
+    this.el.fitOpeningWidth.textContent = opening?.width != null
+      ? `${opening.width.toFixed(2)} m`
+      : '—';
+
+    this.el.fitOpeningHeight.textContent = opening?.height != null
+      ? `${opening.height.toFixed(2)} m`
+      : '—';
+
+    this.el.fitEstimateNote.hidden = !(opening?.width != null || opening?.height != null);
+  }
+
+  /** @param {import('./fit-checker.js').FitResult} FitResult */
+  showFitResult(fitReport, FitResult) {
+    if (!fitReport) {
+      this.el.fitResult.hidden = true;
+      return;
+    }
+
+    this.el.fitResult.hidden = false;
+    this.el.fitResult.classList.remove('fit-ok', 'fit-bad', 'fit-uncertain');
+
+    if (fitReport.result === FitResult.FITS) {
+      this.el.fitResult.classList.add('fit-ok');
+      this.el.fitResultHeadline.textContent = fitReport.tight
+        ? '✓ FITS (tight clearance)'
+        : '✓ FITS';
+      this.el.fitResultDetail.textContent =
+        `Width clearance: ${formatSigned(fitReport.widthClearance)} m · ` +
+        `Height clearance: ${formatSigned(fitReport.heightClearance)} m`;
+      this.el.btnFitRotate.hidden = true;
+    } else if (fitReport.result === FitResult.DOES_NOT_FIT) {
+      this.el.fitResult.classList.add('fit-bad');
+      this.el.fitResultHeadline.textContent = '✗ DOES NOT FIT';
+
+      const shortfalls = [];
+      if (fitReport.widthClearance < 0) {
+        shortfalls.push(`short by ${Math.abs(fitReport.widthClearance).toFixed(2)} m in width`);
+      }
+      if (fitReport.heightClearance < 0) {
+        shortfalls.push(`short by ${Math.abs(fitReport.heightClearance).toFixed(2)} m in height`);
+      }
+      this.el.fitResultDetail.textContent =
+        `Required: ${fitReport.requiredWidth.toFixed(2)} × ${fitReport.requiredHeight.toFixed(2)} m — ` +
+        (shortfalls.join(', ') || 'insufficient space');
+
+      this.el.btnFitRotate.hidden = !fitReport.suggestRotate;
+    } else {
+      this.el.fitResult.classList.add('fit-uncertain');
+      this.el.fitResultHeadline.textContent = '⚠ MEASUREMENT UNCERTAIN';
+      this.el.fitResultDetail.textContent = fitReport.reason || 'Not enough information to check fit.';
+      this.el.btnFitRotate.hidden = true;
+    }
+  }
+
+  // ==========================================================================
+  // CAPTURE (PHOTO / VIDEO)
+  // ==========================================================================
+
+  setRecording(active, seconds = 0) {
+    if (!this.el.recordingIndicator) return;
+
+    this.el.recordingIndicator.hidden = !active;
+
+    if (active) {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = Math.floor(seconds % 60).toString().padStart(2, '0');
+      this.el.recTime.textContent = `REC ${m}:${s}`;
+    }
+
+    if (this.el.btnVideo) {
+      this.el.btnVideo.textContent = active ? '⏹' : '🎥';
+      this.el.btnVideo.title = active ? 'Stop recording' : 'Video';
+    }
+  }
+}
+
+function formatSigned(n) {
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}`;
 }

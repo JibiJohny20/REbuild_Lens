@@ -84,22 +84,15 @@
     <div id="mode-label" class="mode-label"></div>
 
     <div id="topbar">
-      <div class="topbar-group">
-        <button id="btn-exit" class="btn btn-chip">Exit</button>
-        <!-- Undo/Redo: InteractionManager declares _undoStack/_redoStack but
-             has no working push/undo/redo implementation (placeModel calls
-             a _pushUndoSnapshot() method that isn't defined anywhere in the
-             class). Left disabled rather than wired to nothing — see chat
-             summary for details. -->
-        <button id="btn-undo" class="btn btn-chip" disabled title="Undo isn't available yet">↶ Undo</button>
-        <button id="btn-redo" class="btn btn-chip" disabled title="Redo isn't available yet">↷ Redo</button>
-      </div>
-      <div class="topbar-group">
-        <!-- Snap to Surface: connects to InteractionManager.placeModel's
-             existing `snapToSurface` option (see placement.js). -->
-        <button id="btn-snap-toggle" class="btn btn-chip" aria-pressed="false">Snap: Off</button>
-        <button id="btn-help-toggle" class="btn btn-chip">Help</button>
-      </div>
+      <button id="btn-exit" class="btn btn-chip">Exit</button>
+      <button id="btn-fit-toggle" class="btn btn-chip">Will It Fit?</button>
+      <button id="btn-help-toggle" class="btn btn-chip">Help</button>
+    </div>
+
+    <!-- Recording indicator, shown only while a video capture is active. -->
+    <div id="recording-indicator" class="recording-indicator" hidden>
+      <span class="rec-dot"></span>
+      <span id="rec-time">REC 00:00</span>
     </div>
 
     <div id="instruction-banner" class="instruction-banner" hidden></div>
@@ -125,28 +118,6 @@
         <div class="info-row"><span>Position</span><span id="sel-position">—</span></div>
         <div class="info-row"><span>Rotation</span><span id="sel-rotation">—</span></div>
         <div class="info-row"><span>Scale</span><span id="sel-scale">—</span></div>
-        <!-- Quantity: mirrors the existing (currently unused-elsewhere)
-             userData.quantity field set in model-manager.js:createInstance,
-             whose own comment says it's meant to be "surfaced in the
-             selection panel and persisted by Save/Load." -->
-        <div class="info-row">
-          <span>Quantity</span>
-          <span class="qty-stepper">
-            <button id="btn-qty-down" class="btn-icon" aria-label="Decrease quantity">−</button>
-            <span id="sel-quantity">1</span>
-            <button id="btn-qty-up" class="btn-icon" aria-label="Increase quantity">+</button>
-          </span>
-        </div>
-      </div>
-
-      <!-- Rotation angle step, using the existing ROTATE_STEP_OPTIONS_DEG
-           list from config.js. Selecting a value here changes the step the
-           existing "Rotate" button below applies. -->
-      <div id="angle-group" class="angle-group" role="group" aria-label="Rotation angle step">
-        <button type="button" class="btn btn-angle" data-angle="15">15°</button>
-        <button type="button" class="btn btn-angle active" data-angle="22.5">22.5°</button>
-        <button type="button" class="btn btn-angle" data-angle="45">45°</button>
-        <button type="button" class="btn btn-angle" data-angle="90">90°</button>
       </div>
 
       <div class="selection-actions">
@@ -155,7 +126,7 @@
         <button id="btn-scale-up" class="btn btn-action">Scale +</button>
         <button id="btn-scale-down" class="btn btn-action">Scale −</button>
         <button id="btn-duplicate" class="btn btn-action">Duplicate</button>
-        <button id="btn-reset" class="btn btn-action">Reset</button>
+        <button id="btn-reset-object" class="btn btn-action">Reset Transform</button>
         <button id="btn-delete" class="btn btn-action btn-danger">Delete</button>
       </div>
     </div>
@@ -165,18 +136,51 @@
       <div id="toolbar" class="toolbar"></div>
       <div class="toolbar-secondary">
         <button id="btn-add-brick" class="btn btn-chip" hidden>+ Add Brick</button>
-        <span id="brick-quantity-chip" class="btn-chip qty-chip" hidden>Bricks: <span id="brick-quantity-count">0</span></span>
-        <!-- Camera: config.js defines CAPTURE_CONFIG (mime types, timeslice)
-             but no capture/screenshot function exists yet in ar.js,
-             model-manager.js or main.js to connect this to. Wired to a
-             toast until that logic exists — see chat summary. -->
-        <button id="btn-camera" class="btn btn-chip" title="Capture photo">📷</button>
-        <!-- Save/Load: config.js defines PROJECT_STORAGE_KEY but no
-             serialize/deserialize function exists yet on InteractionManager
-             to connect this to. Wired to a toast — see chat summary. -->
-        <button id="btn-save-project" class="btn btn-chip">Save</button>
-        <button id="btn-load-project" class="btn btn-chip">Load</button>
+        <button id="btn-photo" class="btn btn-chip" aria-label="Take photo" title="Photo">📷</button>
+        <button id="btn-video" class="btn btn-chip" aria-label="Record video" title="Video">🎥</button>
+        <button id="btn-reset-scene" class="btn btn-chip" title="Clear scene instantly, no confirmation">Reset</button>
         <button id="btn-clear-scene" class="btn btn-chip btn-danger-outline">Clear Scene</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- Will It Fit? panel                                            -->
+  <!-- ============================================================ -->
+  <div id="fit-panel" class="fit-panel" hidden>
+    <div class="fit-panel-header">
+      <h3>Will It Fit?</h3>
+      <button id="btn-fit-close" class="btn-icon" aria-label="Close">✕</button>
+    </div>
+
+    <div class="fit-panel-body">
+      <p id="fit-object-name" class="fit-object-name">Select a component to check.</p>
+
+      <div class="fit-dimensions">
+        <span id="fit-object-dims">—</span>
+      </div>
+
+      <div class="fit-measure-row">
+        <button id="btn-measure-width" class="btn btn-action">📏 Measure Width</button>
+        <button id="btn-measure-height" class="btn btn-action">📏 Measure Height</button>
+      </div>
+
+      <div class="fit-opening-readout">
+        <div class="info-row"><span>Opening width</span><span id="fit-opening-width">—</span></div>
+        <div class="info-row"><span>Opening height</span><span id="fit-opening-height">—</span></div>
+      </div>
+
+      <p id="fit-estimate-note" class="fit-estimate-note" hidden>Estimated AR measurement — not engineering-accurate.</p>
+
+      <div id="fit-result" class="fit-result" hidden>
+        <div id="fit-result-headline" class="fit-result-headline">—</div>
+        <div id="fit-result-detail" class="fit-result-detail"></div>
+        <button id="btn-fit-rotate" class="btn btn-action" hidden>Try rotating 90°</button>
+      </div>
+
+      <div class="fit-actions">
+        <button id="btn-check-fit" class="btn btn-primary">Check Fit</button>
+        <button id="btn-fit-reset" class="btn btn-secondary">Reset Measurement</button>
       </div>
     </div>
   </div>
