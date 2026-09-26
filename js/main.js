@@ -393,6 +393,8 @@ interaction.attachGestures(
   {
     getCamera: getActiveCamera,
 
+    isMeasuring: () => measurement.isActive(),
+
     onEmptyTap: (ndcX, ndcY) => {
       attemptPlacement(ndcX, ndcY);
     },

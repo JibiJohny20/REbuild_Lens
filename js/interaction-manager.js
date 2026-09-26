@@ -579,7 +579,7 @@ async placeModel(modelId, hitPosition, hitQuaternion = new THREE.Quaternion(), c
 
   attachGestures(
     domElement,
-    { getCamera, onEmptyTap }
+    { getCamera, onEmptyTap, isMeasuring }
   ) {
     const toNDC = (
       clientX,
@@ -624,6 +624,22 @@ async placeModel(modelId, hitPosition, hitQuaternion = new THREE.Quaternion(), c
           y: e.clientY,
           time: performance.now(),
         };
+
+        // ROOT CAUSE (Will It Fit? not working in AR): every tap used to
+        // raycast against placed objects FIRST, regardless of what mode
+        // the app was in. Measuring a real-world opening almost always
+        // means tapping right on/near the object you're checking the fit
+        // of (e.g. tapping the edges of a doorway with a door model
+        // already placed there to compare against) — so the tap kept
+        // hitting that object and re-selecting/dragging it instead of
+        // ever reaching the measurement code. While a measurement is in
+        // progress, object selection and dragging are suppressed
+        // entirely so every tap unambiguously becomes a measurement
+        // point.
+        if (isMeasuring?.()) {
+          this._dragging = false;
+          return;
+        }
 
         const ndc =
           toNDC(
@@ -816,6 +832,18 @@ async placeModel(modelId, hitPosition, hitQuaternion = new THREE.Quaternion(), c
               e.clientX,
               e.clientY
             );
+
+          // Same reasoning as onPointerDown above: while measuring, never
+          // let object hit-testing intercept the tap — it always becomes
+          // a measurement point.
+          if (isMeasuring?.()) {
+            onEmptyTap?.(
+              ndc.x,
+              ndc.y
+            );
+
+            return;
+          }
 
           const camera = getCamera();
 
