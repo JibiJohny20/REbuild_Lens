@@ -142,58 +142,72 @@
         <button id="btn-clear-scene" class="btn btn-chip btn-danger-outline">Clear Scene</button>
       </div>
     </div>
-  </div>
 
-  <!-- ============================================================ -->
-  <!-- Will It Fit? panel                                            -->
-  <!-- ============================================================ -->
-  <div id="fit-panel" class="fit-panel" hidden>
-    <div class="fit-panel-header">
-      <h3>Will It Fit?</h3>
-      <button id="btn-fit-close" class="btn-icon" aria-label="Close">✕</button>
+    <!-- ============================================================ -->
+    <!-- Will It Fit? panel                                            -->
+    <!-- ============================================================ -->
+    <!-- MUST live inside #app-overlay: this element is the WebXR      -->
+    <!-- DOM Overlay root passed to navigator.xr.requestSession() in   -->
+    <!-- ar.js. During a real immersive-ar session, the browser only   -->
+    <!-- renders/allows interaction with elements INSIDE that root —   -->
+    <!-- anything outside it (siblings included) is invisible and     -->
+    <!-- untappable for the duration of the session, even though nothing -->
+    <!-- stops it from working normally outside of AR (e.g. in 3D       -->
+    <!-- Preview, which never opens a WebXR session and so has no such  -->
+    <!-- restriction — this is exactly why this panel worked in 3D      -->
+    <!-- Preview but silently did nothing in real AR). -->
+    <div id="fit-panel" class="fit-panel" hidden>
+      <div class="fit-panel-header">
+        <h3>Will It Fit?</h3>
+        <button id="btn-fit-close" class="btn-icon" aria-label="Close">✕</button>
+      </div>
+
+      <div class="fit-panel-body">
+        <p id="fit-object-name" class="fit-object-name">Select a component to check.</p>
+
+        <div class="fit-dimensions">
+          <span id="fit-object-dims">—</span>
+        </div>
+
+        <div class="fit-measure-row">
+          <button id="btn-measure-width" class="btn btn-action">📏 Measure Width</button>
+          <button id="btn-measure-height" class="btn btn-action">📏 Measure Height</button>
+        </div>
+
+        <div class="fit-opening-readout">
+          <div class="info-row"><span>Opening width</span><span id="fit-opening-width">—</span></div>
+          <div class="info-row"><span>Opening height</span><span id="fit-opening-height">—</span></div>
+        </div>
+
+        <p id="fit-estimate-note" class="fit-estimate-note" hidden>Estimated AR measurement — not engineering-accurate.</p>
+
+        <div id="fit-result" class="fit-result" hidden>
+          <div id="fit-result-headline" class="fit-result-headline">—</div>
+          <div id="fit-result-detail" class="fit-result-detail"></div>
+          <button id="btn-fit-rotate" class="btn btn-action" hidden>Try rotating 90°</button>
+        </div>
+
+        <div class="fit-actions">
+          <button id="btn-check-fit" class="btn btn-primary">Check Fit</button>
+          <button id="btn-fit-reset" class="btn btn-secondary">Reset Measurement</button>
+        </div>
+      </div>
     </div>
 
-    <div class="fit-panel-body">
-      <p id="fit-object-name" class="fit-object-name">Select a component to check.</p>
-
-      <div class="fit-dimensions">
-        <span id="fit-object-dims">—</span>
-      </div>
-
-      <div class="fit-measure-row">
-        <button id="btn-measure-width" class="btn btn-action">📏 Measure Width</button>
-        <button id="btn-measure-height" class="btn btn-action">📏 Measure Height</button>
-      </div>
-
-      <div class="fit-opening-readout">
-        <div class="info-row"><span>Opening width</span><span id="fit-opening-width">—</span></div>
-        <div class="info-row"><span>Opening height</span><span id="fit-opening-height">—</span></div>
-      </div>
-
-      <p id="fit-estimate-note" class="fit-estimate-note" hidden>Estimated AR measurement — not engineering-accurate.</p>
-
-      <div id="fit-result" class="fit-result" hidden>
-        <div id="fit-result-headline" class="fit-result-headline">—</div>
-        <div id="fit-result-detail" class="fit-result-detail"></div>
-        <button id="btn-fit-rotate" class="btn btn-action" hidden>Try rotating 90°</button>
-      </div>
-
-      <div class="fit-actions">
-        <button id="btn-check-fit" class="btn btn-primary">Check Fit</button>
-        <button id="btn-fit-reset" class="btn btn-secondary">Reset Measurement</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================ -->
-  <!-- Generic confirmation modal (delete / clear scene)             -->
-  <!-- ============================================================ -->
-  <div id="confirm-modal" class="modal" hidden>
-    <div class="modal-card">
-      <p id="confirm-message">Are you sure?</p>
-      <div class="modal-actions">
-        <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
-        <button id="confirm-ok" class="btn btn-danger">Confirm</button>
+    <!-- ============================================================ -->
+    <!-- Generic confirmation modal (delete / clear scene)             -->
+    <!-- ============================================================ -->
+    <!-- Same DOM-Overlay requirement as #fit-panel above: this modal  -->
+    <!-- gates Delete and Clear Scene, both of which are used during   -->
+    <!-- an active AR session, so it must be inside #app-overlay or    -->
+    <!-- it silently can't be seen/tapped once a real session starts.  -->
+    <div id="confirm-modal" class="modal" hidden>
+      <div class="modal-card">
+        <p id="confirm-message">Are you sure?</p>
+        <div class="modal-actions">
+          <button id="confirm-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="confirm-ok" class="btn btn-danger">Confirm</button>
+        </div>
       </div>
     </div>
   </div>
@@ -201,6 +215,9 @@
   <!-- ============================================================ -->
   <!-- AR-unsupported modal                                          -->
   <!-- ============================================================ -->
+  <!-- This one is fine OUTSIDE #app-overlay: it only ever shows on   -->
+  <!-- the landing screen, before any WebXR session exists, so the    -->
+  <!-- DOM-Overlay restriction above doesn't apply to it. -->
   <div id="unsupported-modal" class="modal" hidden>
     <div class="modal-card">
       <p>AR is not supported on this device/browser.</p>

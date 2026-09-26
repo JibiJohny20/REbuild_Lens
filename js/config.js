@@ -173,17 +173,10 @@ export const CAPTURE_CONFIG = {
   videoTimesliceMs: 250,
 };
 
-// Preset step sizes (degrees) the Rotate controls cycle through. Index into
-// this array is what the "Angle" button advances; APP_CONFIG.rotateStepDegrees
-// stays as the default starting step.
-export const ROTATE_STEP_OPTIONS_DEG = [15, 22.5, 45, 90];
-
-// localStorage key used by Save Project / Load Project.
-export const PROJECT_STORAGE_KEY = 'structure-ar-project-v1';
-
-// Collision detection settings, consumed by interaction-manager.js.
-// clearanceMargin -> distance (meters) below which two non-overlapping
-// objects are flagged with the orange "insufficient clearance" warning.
 export const COLLISION_CONFIG = {
-  clearanceMargin: 0.02,
+  // Bounding boxes closer than this (meters) but not yet overlapping are
+  // reported as an "insufficient clearance" warning rather than a hard
+  // collision. Kept generous since bounding boxes are already a coarse
+  // stand-in for the real mesh silhouette.
+  clearanceMargin: 0.03,
 };

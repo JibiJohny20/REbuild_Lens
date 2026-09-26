@@ -699,7 +699,13 @@ ui.el.btnDelete.addEventListener(
 ui.el.btnResetScene.addEventListener(
   'click',
   () => {
+    // Previously this silently did nothing when the scene was already
+    // empty — no toast, no visible change at all. On a real device that
+    // looks EXACTLY like a broken button, since the person has no way to
+    // tell "there was nothing to reset" apart from "the tap didn't
+    // register." Always give feedback.
     if (interaction.list().length === 0 && !interaction.getSelected()) {
+      ui.showToast('Scene is already empty.');
       return;
     }
 
